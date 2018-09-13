@@ -100,6 +100,15 @@ with detection_graph.as_default():
       (boxes, scores, classes, num_detections) = sess.run(
           [boxes, scores, classes, num_detections],
           feed_dict={image_tensor: image_np_expanded})
+      ##### boxes: a 2 dimensional numpy array of [N, 4]: (ymin, xmin, ymax, xmax).
+       ###    The coordinates are in normalized format between [0, 1].
+      if boxes.shape[0] > 0:
+          testBox = boxes[0]
+      for i, b in enumerate(boxes[0]):
+          if classes[0][i] == 3:
+              if scores[0][i] >0.5:
+                  print("ELO")
+                  
       # Visualization of the results of a detection.
       vis_util.visualize_boxes_and_labels_on_image_array(
           image_np,
@@ -109,7 +118,13 @@ with detection_graph.as_default():
           category_index,
           use_normalized_coordinates=True,
           line_thickness=8)
-
+      for i,b in enumerate(boxes[0]):
+          if scores[0][i] > 0.5:
+              mid_x = (boxes[0][i][3] + boxes[0][i][1]) / 2
+              mid_y = (boxes[0][i][2] + boxes[0][i][0]) / 2
+              cv2.circle(image_np,(int(mid_x*800),int(mid_y*600)),2, (255,0,0),-1)
+              
+              
       cv2.imshow('window',image_np)
       if cv2.waitKey(25) & 0xFF == ord('q'):
           cv2.destroyAllWindows()
