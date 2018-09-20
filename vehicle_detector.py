@@ -14,6 +14,10 @@ import tensorflow as tf
 #from io import StringIO
 #from matplotlib import pyplot as plt
 #from PIL import Image
+from selectscreen import select_screen
+print("Select screen")
+pos  = select_screen()
+
 from grabscreen import grab_screen
 import cv2
 
@@ -80,11 +84,16 @@ def load_image_into_numpy_array(image):
 # Size, in inches, of the output images.
 IMAGE_SIZE = (12, 8)
 
+capturing_coordinates = (pos[0],pos[1],pos[2],pos[3]) #(100,14,800,600)
+capturing_size = (capturing_coordinates[2],capturing_coordinates[3])
+capturing_resize = (capturing_coordinates[2],capturing_coordinates[3])
+    
 with detection_graph.as_default():
   with tf.Session(graph=detection_graph) as sess:
     while True:
       #screen = cv2.resize(grab_screen(region=(0,40,1280,745)), (WIDTH,HEIGHT))
-      screen = cv2.resize(grab_screen(region=(100,140,800,600)), (800,600))
+      screen = cv2.resize(grab_screen(region=(capturing_coordinates)), (capturing_resize))
+      
       image_np = cv2.cvtColor(screen, cv2.COLOR_BGR2RGB)
       # Expand dimensions since the model expects images to have shape: [1, None, None, 3]
       image_np_expanded = np.expand_dims(image_np, axis=0)
@@ -122,9 +131,9 @@ with detection_graph.as_default():
           if scores[0][i] > 0.5:
               mid_x = (boxes[0][i][3] + boxes[0][i][1]) / 2
               mid_y = (boxes[0][i][2] + boxes[0][i][0]) / 2
-              cv2.circle(image_np,(int(mid_x*800),int(mid_y*600)),2, (255,0,0),-1)
+              cv2.circle(image_np,(int(mid_x*capturing_coordinates[2]),int(mid_y*capturing_coordinates[3])),2, (255,0,0),-1)
               
-              
+      test_a = capturing_coordinates[0]
       cv2.imshow('window',image_np)
       if cv2.waitKey(25) & 0xFF == ord('q'):
           cv2.destroyAllWindows()
