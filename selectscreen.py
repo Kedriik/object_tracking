@@ -27,8 +27,8 @@ def select_screen():
             else:
                 print('Corner 2 selected')
                 x2,y2=win32api.GetCursorPos()
-                x2 = x2 - x1
-                y2 = y2 - y1
+                #x2 = x2 - x1
+                #y2 = y2 - y1
                 pos.append(x2)
                 pos.append(y2)
                 print(pos)

@@ -8,6 +8,9 @@ import six.moves.urllib as urllib
 import sys
 import tarfile
 import tensorflow as tf
+import cv2
+
+import math
 #import zipfile
 
 #from collections import defaultdict
@@ -80,6 +83,21 @@ def load_image_into_numpy_array(image):
   (im_width, im_height) = image.size
   return np.array(image.getdata()).reshape(
       (im_height, im_width, 3)).astype(np.uint8)
+gp1 = [10,0]
+gp2 = [0,10]
+def screen_distance(p1, p2):
+    #gp1=p1
+    #gp2=p2
+    return math.sqrt(math.pow(p1[0] - p2[0],2) + math.pow(p1[1] - p2[1],2))
+
+running_trackers = []
+max_trackers = 10
+def add_tracker(frame,bbox):
+    if len(running_trackers) < max_trackers:
+        tracker = cv2.TrackerGOTURN_create()
+        tracker.init(frame, bbox)
+        running_trackers.append(tracker)
+    
 
 # Size, in inches, of the output images.
 IMAGE_SIZE = (12, 8)
@@ -87,7 +105,10 @@ IMAGE_SIZE = (12, 8)
 capturing_coordinates = (pos[0],pos[1],pos[2],pos[3]) #(100,14,800,600)
 capturing_size = (capturing_coordinates[2],capturing_coordinates[3])
 capturing_resize = (capturing_coordinates[2],capturing_coordinates[3])
-    
+
+tracked_centroids = []
+ID = 0
+
 with detection_graph.as_default():
   with tf.Session(graph=detection_graph) as sess:
     while True:
@@ -109,14 +130,7 @@ with detection_graph.as_default():
       (boxes, scores, classes, num_detections) = sess.run(
           [boxes, scores, classes, num_detections],
           feed_dict={image_tensor: image_np_expanded})
-      ##### boxes: a 2 dimensional numpy array of [N, 4]: (ymin, xmin, ymax, xmax).
-       ###    The coordinates are in normalized format between [0, 1].
-      if boxes.shape[0] > 0:
-          testBox = boxes[0]
-      for i, b in enumerate(boxes[0]):
-          if classes[0][i] == 3:
-              if scores[0][i] >0.5:
-                  print("ELO")
+      ##### boxes: a 2 dimensional numpy array of [N, 4]: (ymin, xmin, ymax, xmax)
                   
       # Visualization of the results of a detection.
       vis_util.visualize_boxes_and_labels_on_image_array(
@@ -126,14 +140,57 @@ with detection_graph.as_default():
           np.squeeze(scores),
           category_index,
           use_normalized_coordinates=True,
-          line_thickness=8)
+          line_thickness=1)
+      #center points of detected centroids
+      currently_detected_centroids = []
+      
       for i,b in enumerate(boxes[0]):
           if scores[0][i] > 0.5:
               mid_x = (boxes[0][i][3] + boxes[0][i][1]) / 2
               mid_y = (boxes[0][i][2] + boxes[0][i][0]) / 2
-              cv2.circle(image_np,(int(mid_x*capturing_coordinates[2]),int(mid_y*capturing_coordinates[3])),2, (255,0,0),-1)
-              
-      test_a = capturing_coordinates[0]
+              point = []
+              point.append(mid_x)
+              point.append(mid_y)
+              currently_detected_centroids.append(point)
+      
+      for i in range(len(tracked_centroids)):
+          min_dist = -1
+          for j in range(len(currently_detected_centroids)):
+              dist = screen_distance(tracked_centroids[i] , currently_detected_centroids[j])
+              if min_dist == -1 or dist < min_dist:
+                  min_dist = dist
+                  min_centroid = currently_detected_centroids[j]
+          tracked_centroids[i] = min_centroid
+          currently_detected_centroids.remove(min_centroid)
+          
+      left_bboxes = []
+      for i,b in enumerate(boxes[0]):
+          if scores[0][i] > 0.5:
+              mid_x = (boxes[0][i][3] + boxes[0][i][1]) / 2
+              mid_y = (boxes[0][i][2] + boxes[0][i][0]) / 2
+              point = []
+              point.append(mid_x)
+              point.append(mid_y)
+              for j in range(len(currently_detected_centroids)):
+                  if screen_distance(point, currently_detected_centroids[j]):
+                      left_bboxes.append(b)
+      
+      for i in range(len(left_bboxes)):
+          add_tracker(image_np,left_bboxes[i])
+          
+      for i in range(len(running_trackers)):
+              # Update tracker
+          ok, bbox = running_trackers[i].update(image_np)
+              # Draw bounding box
+          if ok:
+              # Tracking success
+              p1 = (int(bbox[0]), int(bbox[1]))
+              p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
+              cv2.rectangle(image_np, p1, p2, (255,0,0), 2, 1)
+          else :
+              # Tracking failure
+              cv2.putText(image_np, "Tracking failure detected", (100,80), cv2.FONT_HERSHEY_SIMPLEX, 0.75,(0,0,255),2)
+
       cv2.imshow('window',image_np)
       if cv2.waitKey(25) & 0xFF == ord('q'):
           cv2.destroyAllWindows()
