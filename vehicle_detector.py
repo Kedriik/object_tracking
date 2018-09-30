@@ -83,30 +83,43 @@ def load_image_into_numpy_array(image):
   (im_width, im_height) = image.size
   return np.array(image.getdata()).reshape(
       (im_height, im_width, 3)).astype(np.uint8)
-gp1 = [10,0]
-gp2 = [0,10]
+
 def screen_distance(p1, p2):
-    #gp1=p1
-    #gp2=p2
     return math.sqrt(math.pow(p1[0] - p2[0],2) + math.pow(p1[1] - p2[1],2))
 
-running_trackers = []
-max_trackers = 10
-def add_tracker(frame,bbox):
-    if len(running_trackers) < max_trackers:
-        tracker = cv2.TrackerGOTURN_create()
-        tracker.init(frame, bbox)
-        running_trackers.append(tracker)
+def compute_centroid(bbox):
+      mid_x = (bbox[3] + bbox[1]) / 2
+      mid_y = (bbox[2] + bbox[0]) / 2
+      point = []
+      point.append(mid_x)
+      point.append(mid_y)
+      return point
     
+capturing_coordinates = (pos[0],pos[1],pos[2],pos[3]) #(100,14,800,600)
+capturing_size = (pos[2]-pos[0],pos[3]-pos[1])
+capturing_resize = (pos[2]-pos[0],pos[3]-pos[1])
+
+
+running_trackers = []
+max_trackers = 1
+
+def bboxToPixels(bbox):
+    return (int(bbox[1]*float(capturing_size[0])),int(bbox[0]*float(capturing_size[1])),int(bbox[3]*float(capturing_size[0])),int(bbox[2]*float(capturing_size[1])))
+
+gbbox = (0,0,0,0)            
+def add_tracker(frame,bbox):
+    bbox = bboxToPixels(bbox)
+    print(bbox)
+    tracker = cv2.TrackerGOTURN_create()
+    tracker.init(frame, bbox)
+    running_trackers.append(tracker)
+
 
 # Size, in inches, of the output images.
 IMAGE_SIZE = (12, 8)
 
-capturing_coordinates = (pos[0],pos[1],pos[2],pos[3]) #(100,14,800,600)
-capturing_size = (capturing_coordinates[2],capturing_coordinates[3])
-capturing_resize = (capturing_coordinates[2],capturing_coordinates[3])
-
-tracked_centroids = []
+tracked_items = []
+tracked_ids = []
 ID = 0
 
 with detection_graph.as_default():
@@ -133,50 +146,41 @@ with detection_graph.as_default():
       ##### boxes: a 2 dimensional numpy array of [N, 4]: (ymin, xmin, ymax, xmax)
                   
       # Visualization of the results of a detection.
-      vis_util.visualize_boxes_and_labels_on_image_array(
-          image_np,
-          np.squeeze(boxes),
-          np.squeeze(classes).astype(np.int32),
-          np.squeeze(scores),
-          category_index,
-          use_normalized_coordinates=True,
-          line_thickness=1)
+# =============================================================================
+#       vis_util.visualize_boxes_and_labels_on_image_array(
+#           image_np,
+#           np.squeeze(boxes),
+#           np.squeeze(classes).astype(np.int32),
+#           np.squeeze(scores),
+#           category_index,
+#           use_normalized_coordinates=True,
+#           line_thickness=1)
+# =============================================================================
       #center points of detected centroids
-      currently_detected_centroids = []
+      detected_items = []
       
       for i,b in enumerate(boxes[0]):
-          if scores[0][i] > 0.5:
-              mid_x = (boxes[0][i][3] + boxes[0][i][1]) / 2
-              mid_y = (boxes[0][i][2] + boxes[0][i][0]) / 2
-              point = []
-              point.append(mid_x)
-              point.append(mid_y)
-              currently_detected_centroids.append(point)
+          if scores[0][i] > 0.5 and classes[0][i] == 3:
+              detected_items.append(b)
       
-      for i in range(len(tracked_centroids)):
+      for i in range(len(tracked_items)):
           min_dist = -1
-          for j in range(len(currently_detected_centroids)):
-              dist = screen_distance(tracked_centroids[i] , currently_detected_centroids[j])
+          min_bbox = None
+          for j in range(len(detected_items)):
+              dist = screen_distance(compute_centroid(tracked_items[i]) , compute_centroid(detected_items[j]))
               if min_dist == -1 or dist < min_dist:
                   min_dist = dist
-                  min_centroid = currently_detected_centroids[j]
-          tracked_centroids[i] = min_centroid
-          currently_detected_centroids.remove(min_centroid)
-          
-      left_bboxes = []
-      for i,b in enumerate(boxes[0]):
-          if scores[0][i] > 0.5:
-              mid_x = (boxes[0][i][3] + boxes[0][i][1]) / 2
-              mid_y = (boxes[0][i][2] + boxes[0][i][0]) / 2
-              point = []
-              point.append(mid_x)
-              point.append(mid_y)
-              for j in range(len(currently_detected_centroids)):
-                  if screen_distance(point, currently_detected_centroids[j]):
-                      left_bboxes.append(b)
+                  min_bbox = detected_items[j]
+          if min_bbox is not None:
+              tracked_items[i] = min_bbox
+              if detected_items.count(min_bbox) > 0:
+                  detected_items.remove(min_bbox)
       
-      for i in range(len(left_bboxes)):
-          add_tracker(image_np,left_bboxes[i])
+      for i in range(len(detected_items)):
+          if len(running_trackers) < max_trackers:
+              add_tracker(image_np,detected_items[i])
+              tracked_items.append(detected_items[i])
+              
           
       for i in range(len(running_trackers)):
               # Update tracker
@@ -186,7 +190,7 @@ with detection_graph.as_default():
               # Tracking success
               p1 = (int(bbox[0]), int(bbox[1]))
               p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
-              cv2.rectangle(image_np, p1, p2, (255,0,0), 2, 1)
+              cv2.rectangle(image_np, p1, p2, (255,255,255), 2, 1)
           else :
               # Tracking failure
               cv2.putText(image_np, "Tracking failure detected", (100,80), cv2.FONT_HERSHEY_SIMPLEX, 0.75,(0,0,255),2)
