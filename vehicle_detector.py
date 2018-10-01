@@ -104,14 +104,18 @@ running_trackers = []
 max_trackers = 1
 
 def bboxToPixels(bbox):
-    return (int(bbox[1]*float(capturing_size[0])),int(bbox[0]*float(capturing_size[1])),int(bbox[3]*float(capturing_size[0])),int(bbox[2]*float(capturing_size[1])))
+    xmin = int(bbox[1]*float(capturing_size[0]))
+    ymin = int(bbox[0]*float(capturing_size[1]))
+    xmax = int(bbox[3]*float(capturing_size[0]))
+    ymax = int(bbox[2]*float(capturing_size[1]))
+    return (xmin,ymin,xmax-xmin,ymax-ymin)
 
 gbbox = (0,0,0,0)            
 def add_tracker(frame,bbox):
     bbox = bboxToPixels(bbox)
-    print(bbox)
     tracker = cv2.TrackerGOTURN_create()
     tracker.init(frame, bbox)
+    print("tracker added")
     running_trackers.append(tracker)
 
 
@@ -146,16 +150,14 @@ with detection_graph.as_default():
       ##### boxes: a 2 dimensional numpy array of [N, 4]: (ymin, xmin, ymax, xmax)
                   
       # Visualization of the results of a detection.
-# =============================================================================
-#       vis_util.visualize_boxes_and_labels_on_image_array(
-#           image_np,
-#           np.squeeze(boxes),
-#           np.squeeze(classes).astype(np.int32),
-#           np.squeeze(scores),
-#           category_index,
-#           use_normalized_coordinates=True,
-#           line_thickness=1)
-# =============================================================================
+      vis_util.visualize_boxes_and_labels_on_image_array(
+          image_np,
+          np.squeeze(boxes),
+          np.squeeze(classes).astype(np.int32),
+          np.squeeze(scores),
+          category_index,
+          use_normalized_coordinates=True,
+          line_thickness=1)
       #center points of detected centroids
       detected_items = []
       
@@ -190,7 +192,7 @@ with detection_graph.as_default():
               # Tracking success
               p1 = (int(bbox[0]), int(bbox[1]))
               p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
-              cv2.rectangle(image_np, p1, p2, (255,255,255), 2, 1)
+              cv2.rectangle(image_np, p1, p2, (255,255,255), 3, 1)
           else :
               # Tracking failure
               cv2.putText(image_np, "Tracking failure detected", (100,80), cv2.FONT_HERSHEY_SIMPLEX, 0.75,(0,0,255),2)
