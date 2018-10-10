@@ -110,6 +110,16 @@ def bboxToPixels(bbox):
     ymax = int(bbox[2]*float(capturing_size[1]))
     return (xmin,ymin,xmax-xmin,ymax-ymin)
 
+def isPointInsideBbox(point,bbox):
+    xmin = bbox[1]
+    ymin = bbox[0]
+    xmax = bbox[3]
+    ymax = bbox[2]
+    if point[0] > xmin and point[0] < xmax and point[1] > ymin and point[1] < ymax:
+        return True
+    else:
+        return False
+
 gbbox = (0,0,0,0)            
 def add_tracker(frame,bbox):
     bbox = bboxToPixels(bbox)
@@ -119,13 +129,20 @@ def add_tracker(frame,bbox):
     running_trackers.append(tracker)
 
 
+
 # Size, in inches, of the output images.
 IMAGE_SIZE = (12, 8)
 
 tracked_items = []
+tracked_items_offscreen_frames = []
 tracked_ids = []
 ID = 0
 
+def remove_tracker(index):
+    del running_trackers[index]
+    del tracked_items[index]
+    del tracked_items_offscreen_frames[index]
+    
 with detection_graph.as_default():
   with tf.Session(graph=detection_graph) as sess:
     while True:
@@ -170,20 +187,28 @@ with detection_graph.as_default():
           min_bbox = None
           for j in range(len(detected_items)):
               dist = screen_distance(compute_centroid(tracked_items[i]) , compute_centroid(detected_items[j]))
-              if min_dist == -1 or dist < min_dist:
+              if (min_dist == -1 or dist < min_dist ) and isPointInsideBbox(compute_centroid(detected_items[j]),tracked_items[i]) :
                   min_dist = dist
                   min_bbox = detected_items[j]
           if min_bbox is not None:
               tracked_items[i] = min_bbox
               if detected_items.count(min_bbox) > 0:
                   detected_items.remove(min_bbox)
+          else:
+              tracked_items_offscreen_frames[i] = tracked_items_offscreen_frames[i] + 1;
       
       for i in range(len(detected_items)):
           if len(running_trackers) < max_trackers:
               add_tracker(image_np,detected_items[i])
               tracked_items.append(detected_items[i])
+              tracked_items_offscreen_frames.append(0)
               
-          
+      for i in range(len(tracked_items)):
+          if tracked_items_offscreen_frames[i] > 100:
+              remove_tracker(i)
+              print("tracked removed")
+              
+              
       for i in range(len(running_trackers)):
               # Update tracker
           ok, bbox = running_trackers[i].update(image_np)
