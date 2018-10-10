@@ -110,22 +110,59 @@ def bboxToPixels(bbox):
     ymax = int(bbox[2]*float(capturing_size[1]))
     return (xmin,ymin,xmax-xmin,ymax-ymin)
 
-gbbox = (0,0,0,0)            
+def isPointInsideBbox(point,bbox):
+    xmin = bbox[1]
+    ymin = bbox[0]
+    xmax = bbox[3]
+    ymax = bbox[2]
+    if point[0] > xmin and point[0] < xmax and point[1] > ymin and point[1] < ymax:
+        return True
+    else:
+        return False
+
+def showTrackedItems(frame,bbox):
+    crop_img = frame[bbox[1]:bbox[1]+bbox[3],bbox[0]:bbox[0]+bbox[2]]
+    cv2.imshow("cropped", crop_img)
+saved_images_counter = 0
+def saveImage(image):
+    global images_params
+    global saved_images_counter
+    cv2.imwrite('D:\Temporary\TestDir\test{}.jpg'.format(saved_images_counter)
+    , image)
+    saved_images_counter = saved_images_counter + 1
+
+tracked_items = []
+tracked_items_offscreen_frames = []
+tracked_ids = []
+tracker_ID = 0
+           
 def add_tracker(frame,bbox):
+    global tracker_ID
     bbox = bboxToPixels(bbox)
-    tracker = cv2.TrackerGOTURN_create()
+    #TLD the best so far
+    #tracker = cv2.TrackerTLD_create()
+    tracker = cv2.TrackerTLD_create()
     tracker.init(frame, bbox)
     print("tracker added")
     running_trackers.append(tracker)
+    tracked_ids.append(tracker_ID)
+    tracker_ID =  tracker_ID + 1
+    print(bbox)
+    showTrackedItems(frame,bbox)
+
+def remove_tracker(index):
+    del running_trackers[index]
+    del tracked_items[index]
+    del tracked_items_offscreen_frames[index]
+    del tracked_ids[index]
+    
+#def saveTrackedItemAsPNG(frame, bbox):
+    
 
 
-# Size, in inches, of the output images.
+    # Size, in inches, of the output images.
 IMAGE_SIZE = (12, 8)
-
-tracked_items = []
-tracked_ids = []
-ID = 0
-
+    
 with detection_graph.as_default():
   with tf.Session(graph=detection_graph) as sess:
     while True:
@@ -163,27 +200,36 @@ with detection_graph.as_default():
       
       for i,b in enumerate(boxes[0]):
           if scores[0][i] > 0.5 and classes[0][i] == 3:
-              detected_items.append(b)
+              detected_items.append(b.tolist())
       
       for i in range(len(tracked_items)):
           min_dist = -1
           min_bbox = None
           for j in range(len(detected_items)):
               dist = screen_distance(compute_centroid(tracked_items[i]) , compute_centroid(detected_items[j]))
-              if min_dist == -1 or dist < min_dist:
+              if (min_dist == -1 or dist < min_dist ):# and isPointInsideBbox(compute_centroid(detected_items[j]),tracked_items[i]) :
                   min_dist = dist
                   min_bbox = detected_items[j]
           if min_bbox is not None:
               tracked_items[i] = min_bbox
-              if detected_items.count(min_bbox) > 0:
-                  detected_items.remove(min_bbox)
+              #test = detected_items.count(min_bbox)
+              #if detected_items.count(min_bbox) > 0:
+              detected_items.remove(min_bbox)
+          else:
+              tracked_items_offscreen_frames[i] = tracked_items_offscreen_frames[i] + 1;
       
       for i in range(len(detected_items)):
           if len(running_trackers) < max_trackers:
               add_tracker(image_np,detected_items[i])
               tracked_items.append(detected_items[i])
+              tracked_items_offscreen_frames.append(0)
               
-          
+      for i in range(len(tracked_items)):
+          if tracked_items_offscreen_frames[i] > 10:
+              #remove_tracker(i)
+              print("tracked removed")
+              
+              
       for i in range(len(running_trackers)):
               # Update tracker
           ok, bbox = running_trackers[i].update(image_np)
@@ -193,6 +239,9 @@ with detection_graph.as_default():
               p1 = (int(bbox[0]), int(bbox[1]))
               p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
               cv2.rectangle(image_np, p1, p2, (255,255,255), 3, 1)
+              cv2.putText(image_np, 'ID={}'.format(tracked_ids[i]), 
+                          (int(capturing_size[0]*compute_centroid(tracked_items[i])[0]),int(capturing_size[1]*compute_centroid(tracked_items[i])[1])),
+                          cv2.FONT_HERSHEY_SIMPLEX, 0.5,(255,0,0),2)
           else :
               # Tracking failure
               cv2.putText(image_np, "Tracking failure detected", (100,80), cv2.FONT_HERSHEY_SIMPLEX, 0.75,(0,0,255),2)
