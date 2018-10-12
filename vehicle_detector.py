@@ -123,7 +123,9 @@ def isPointInsideBbox(point,bbox):
 gbbox = (0,0,0,0)            
 def add_tracker(frame,bbox):
     bbox = bboxToPixels(bbox)
-    tracker = cv2.TrackerGOTURN_create()
+   # tracker = cv2.TrackerTLD_create() 
+    tracker = cv2.TrackerKCF_create()
+   # tracker = cv2.TrackerMedianFlow_create() 
     tracker.init(frame, bbox)
     print("tracker added")
     running_trackers.append(tracker)
@@ -142,6 +144,7 @@ def remove_tracker(index):
     del running_trackers[index]
     del tracked_items[index]
     del tracked_items_offscreen_frames[index]
+    print("tracked removed")
     
 with detection_graph.as_default():
   with tf.Session(graph=detection_graph) as sess:
@@ -206,7 +209,7 @@ with detection_graph.as_default():
       for i in range(len(tracked_items)):
           if tracked_items_offscreen_frames[i] > 100:
               remove_tracker(i)
-              print("tracked removed")
+              
               
               
       for i in range(len(running_trackers)):
@@ -221,7 +224,7 @@ with detection_graph.as_default():
           else :
               # Tracking failure
               cv2.putText(image_np, "Tracking failure detected", (100,80), cv2.FONT_HERSHEY_SIMPLEX, 0.75,(0,0,255),2)
-
+              remove_tracker(i)
       cv2.imshow('window',image_np)
       if cv2.waitKey(25) & 0xFF == ord('q'):
           cv2.destroyAllWindows()
