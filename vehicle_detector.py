@@ -9,7 +9,8 @@ import sys
 import tarfile
 import tensorflow as tf
 import cv2
-
+import win32api
+import time
 import math
 #import zipfile
 
@@ -101,7 +102,7 @@ capturing_resize = (pos[2]-pos[0],pos[3]-pos[1])
 
 
 running_trackers = []
-max_trackers = 1
+max_trackers = 0
 
 def bboxToPixels(bbox):
     xmin = int(bbox[1]*float(capturing_size[0]))
@@ -160,15 +161,33 @@ def remove_tracker(index):
     
 
 
-    # Size, in inches, of the output images.
+# Size, in inches, of the output images.
+
 IMAGE_SIZE = (12, 8)
-    
+mouseX = 0
+mouseY = 0
+detected_items = []  
+def track_selected(event,x,y,flags,param):
+    global detected_items
+    global image_np
+    if event == cv2.EVENT_LBUTTONDBLCLK:
+        click_point = []
+        click_point.append(x/capturing_resize[0]);
+        click_point.append(y/capturing_resize[1]);
+        for i in range(len(detected_items)):
+            if isPointInsideBbox(click_point, detected_items[i]) == True:
+                print("Inside")
+                add_tracker(image_np,detected_items[i])
+                
+cv2.namedWindow('window')
+cv2.setMouseCallback('window',track_selected)                
+
 with detection_graph.as_default():
   with tf.Session(graph=detection_graph) as sess:
     while True:
-      #screen = cv2.resize(grab_screen(region=(0,40,1280,745)), (WIDTH,HEIGHT))
-      screen = cv2.resize(grab_screen(region=(capturing_coordinates)), (capturing_resize))
-      
+      state_right = win32api.GetKeyState(0x02)
+      if state_right == 0 or state_right == 1:
+          screen = cv2.resize(grab_screen(region=(capturing_coordinates)), (capturing_resize))
       image_np = cv2.cvtColor(screen, cv2.COLOR_BGR2RGB)
       # Expand dimensions since the model expects images to have shape: [1, None, None, 3]
       image_np_expanded = np.expand_dims(image_np, axis=0)
@@ -196,40 +215,11 @@ with detection_graph.as_default():
           use_normalized_coordinates=True,
           line_thickness=1)
       #center points of detected centroids
-      detected_items = []
       
+      detected_items.clear();
       for i,b in enumerate(boxes[0]):
-          if scores[0][i] > 0.5 and classes[0][i] == 3:
+          if scores[0][i] > 0.33:# and classes[0][i] == 3:
               detected_items.append(b.tolist())
-      
-      for i in range(len(tracked_items)):
-          min_dist = -1
-          min_bbox = None
-          for j in range(len(detected_items)):
-              dist = screen_distance(compute_centroid(tracked_items[i]) , compute_centroid(detected_items[j]))
-              if (min_dist == -1 or dist < min_dist ):# and isPointInsideBbox(compute_centroid(detected_items[j]),tracked_items[i]) :
-                  min_dist = dist
-                  min_bbox = detected_items[j]
-          if min_bbox is not None:
-              tracked_items[i] = min_bbox
-              #test = detected_items.count(min_bbox)
-              #if detected_items.count(min_bbox) > 0:
-              detected_items.remove(min_bbox)
-          else:
-              tracked_items_offscreen_frames[i] = tracked_items_offscreen_frames[i] + 1;
-      
-      for i in range(len(detected_items)):
-          if len(running_trackers) < max_trackers:
-              add_tracker(image_np,detected_items[i])
-              tracked_items.append(detected_items[i])
-              tracked_items_offscreen_frames.append(0)
-              
-      for i in range(len(tracked_items)):
-          if tracked_items_offscreen_frames[i] > 10:
-              #remove_tracker(i)
-              print("tracked removed")
-              
-              
       for i in range(len(running_trackers)):
               # Update tracker
           ok, bbox = running_trackers[i].update(image_np)
@@ -239,13 +229,14 @@ with detection_graph.as_default():
               p1 = (int(bbox[0]), int(bbox[1]))
               p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
               cv2.rectangle(image_np, p1, p2, (255,255,255), 3, 1)
-              cv2.putText(image_np, 'ID={}'.format(tracked_ids[i]), 
-                          (int(capturing_size[0]*compute_centroid(tracked_items[i])[0]),int(capturing_size[1]*compute_centroid(tracked_items[i])[1])),
-                          cv2.FONT_HERSHEY_SIMPLEX, 0.5,(255,0,0),2)
+#              cv2.putText(image_np, 'ID={}'.format(tracked_ids[i]), 
+#                          (int(capturing_size[0]*compute_centroid(tracked_items[i])[0]),int(capturing_size[1]*compute_centroid(tracked_items[i])[1])),
+#                          cv2.FONT_HERSHEY_SIMPLEX, 0.5,(255,0,0),2)
           else :
               # Tracking failure
               cv2.putText(image_np, "Tracking failure detected", (100,80), cv2.FONT_HERSHEY_SIMPLEX, 0.75,(0,0,255),2)
-
+      #state_right = win32api.GetKeyState(0x02)
+      #print(state_right)
       cv2.imshow('window',image_np)
       if cv2.waitKey(25) & 0xFF == ord('q'):
           cv2.destroyAllWindows()
